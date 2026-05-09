@@ -1,11 +1,12 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
 from dotenv import load_dotenv
 from supabase import create_client
-import os
 
 load_dotenv()
+
 supabase = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_KEY")
@@ -23,23 +24,34 @@ from utils import (
 
 app = FastAPI()
 
+# CORS for frontend connection
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # later replace with your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 UPLOAD_FOLDER = "resumes"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-JOB_DESCRIPTION = """
-Python Developer with FastAPI, React, SQL, APIs, and AI integration experience.
-"""
 
 @app.post("/analyze")
-async def analyze_resume(file: UploadFile = File(...)):
+async def analyze_resume(
+    file: UploadFile = File(...),
+    description: str = Form(...),
+    min_experience: int = Form(0),
+    max_experience: int = Form(10),
+):
 
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # reopen file for parsing
+    
     with open(file_path, "rb") as resume_file:
 
         if file.filename.endswith(".pdf"):
@@ -53,22 +65,15 @@ async def analyze_resume(file: UploadFile = File(...)):
         else:
             resume_text = ""
 
-        print("========== RESUME TEXT ==========")
-        print(resume_text[:2000])
-        print("================================")
-
-        # Build ATS prompt
         prompt = get_prompt(
             resume_text,
-            JOB_DESCRIPTION,
-            0,
-            10
+            description,
+            min_experience,
+            max_experience
         )
 
-        # Get ATS score
         score = get_ats_score(prompt, file.filename)
 
-        # Extract candidate details
         candidate_info = get_candidate_info(resume_text)
 
         name = extract_info_details_name(candidate_info)
@@ -76,8 +81,6 @@ async def analyze_resume(file: UploadFile = File(...)):
         phone = extract_info_details_phone(candidate_info)
 
     shortlisted = score >= 70
-
-
 
     try:
         supabase.table("candidates").upsert({

@@ -79,7 +79,6 @@ def main():
 
     description = ""
     interview_link = ""
-    interview_id = ""
 
     if selected_role != "Select a Job Role":
         selected_interview = interview_options[selected_role]
@@ -94,7 +93,6 @@ def main():
             else selected_interview["url"]
         )
 
-        interview_id = selected_interview["id"]
 
     st.text_area(
         "Job Description:",
@@ -105,7 +103,7 @@ def main():
 
     min_experience = st.number_input("Minimum Years of Experience:", min_value=0, max_value=50, value=1, step=1)
     max_experience = st.number_input("Maximum Years of Experience:", min_value=0, max_value=50, value=3, step=1)
-    ats_criteria = st.number_input("Enter ATS Score Criteria (difficulty level):", min_value=0, max_value=100, value=75, step=1)
+    ats_criteria = st.number_input("Enter ATS Score Criteria (difficulty level):", min_value=0, max_value=100, value=70, step=5)
 
     st.markdown("---")
     st.subheader("Upload Resumes")
@@ -135,9 +133,7 @@ def main():
                 selected_role
             )
             
-    with st.expander("Show Debug Logs"):
-        captured_output = sys.stdout.getvalue()
-        st.text_area("Debug Logs", captured_output, height=150)
+   
 
 def process_resumes(description, ats_criteria, uploaded_files, min_experience, max_experience):
     proceed_resumes = []
