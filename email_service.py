@@ -4,18 +4,18 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 
-SMTP_PORT = os.getenv("SMTP_PORT")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_USERNAME = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 FROM_EMAIL = os.getenv("SMTP_USER")
 
-def send_email_to(to_email, subject, body_html, attachment_path=None):
+def send_email_to(to_email, subject, body_html,company_name = "" , attachment_path=None):
     try:
         msg = MIMEMultipart()
         msg['Subject'] = subject
         msg['To'] = to_email
-        msg['From'] = FROM_EMAIL
+        msg['From'] = f"{company_name} <{FROM_EMAIL}>"
 
         body_part = MIMEText(body_html, 'html')
         msg.attach(body_part)
@@ -108,18 +108,18 @@ hr_body_html = '''
 '''
 
 
-def candidate_email_body(candidate_name, interview_link , role_name):
+def candidate_email_body(candidate_name, interview_link , role_name,company_name):
     body_html = f'''
     <div style="font-family: Arial, sans-serif; font-size:14px; color:#000; line-height:1.6;">
 
         <p>
-            <strong>Subject:</strong> Application Update: {candidate_name} - {role_name} Role
+            <strong></strong> Application Update: {candidate_name} - {role_name} Role
         </p>
 
         <p>Dear Candidate,</p>
 
         <p>
-            Thank you for your interest in the Software Engineer position and for taking the time to submit your application.
+            Thank you for your interest in the Software Engineer position at {company_name} and for taking the time to submit your application.
         </p>
 
         <p>
@@ -153,6 +153,46 @@ def candidate_email_body(candidate_name, interview_link , role_name):
         <p>
             Thank you for your interest in joining our team.
             We look forward to your participation in the next stage of the process.
+        </p>
+
+        <p>
+            Sincerely,
+        </p>
+
+        <p>
+            <strong>Talent Acquisition Team</strong>
+        </p>
+
+    </div>
+    '''
+    return body_html
+
+def rejection_email_body(candidate_name, role_name, company_name):
+    body_html = f'''
+    <div style="font-family: Arial, sans-serif; font-size:14px; color:#000; line-height:1.6;">
+
+        <p>
+            <strong></strong> Application Update: {candidate_name} - {role_name} Role
+        </p>
+
+        <p>Dear {candidate_name},</p>
+
+        <p>
+            Thank you for your interest in the {role_name} position at {company_name} and for taking the time to apply.
+        </p>
+
+        <p>
+            After careful review of your application, we regret to inform you that
+            you have not been selected for the next stage of the recruitment process.
+        </p>
+
+        <p>
+            We truly appreciate your interest in our company and encourage you to
+            apply again for future opportunities that match your profile and experience.
+        </p>
+
+        <p>
+            We wish you all the best in your career journey and future endeavors.
         </p>
 
         <p>

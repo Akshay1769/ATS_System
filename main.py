@@ -25,7 +25,7 @@ st.set_page_config(page_title="X Hire", page_icon=":briefcase:", layout="centere
 def get_active_interviews():
     response = (
         supabase.table("interview")
-        .select("id,name,objective,url,readable_slug")
+        .select("id,name,objective,url,readable_slug,organization(name)")
         .eq("is_active", True)
         .execute()
     )
@@ -33,12 +33,13 @@ def get_active_interviews():
     return response.data
 
 
-def store_candidate(email, ats_score, interview_link):
+def store_candidate(email, ats_score, interview_link ,shortlisted , role_name):
     existing = (
-        supabase.table("candidates")
-        .select("*")
-        .eq("email", email)
-        .execute()
+    supabase.table("candidates")
+    .select("*")
+    .eq("email", email)
+    .eq("interview_link", interview_link)
+    .execute()
     )
 
     if existing.data:
@@ -48,9 +49,10 @@ def store_candidate(email, ats_score, interview_link):
     supabase.table("candidates").insert({
         "email": email,
         "ats_score": ats_score,
-        "shortlisted": True,
+        "shortlisted": shortlisted,
         "interview_link": interview_link,
-        "email_sent": True
+        "email_sent": True,
+        "role": role_name
     }).execute()
 
     return True
@@ -79,6 +81,10 @@ def main():
 
     description = ""
     interview_link = ""
+    description = ""
+    organization_name = "XHire"
+    
+
 
     if selected_role != "Select a Job Role":
         selected_interview = interview_options[selected_role]
@@ -92,6 +98,8 @@ def main():
             if selected_interview["readable_slug"]
             else selected_interview["url"]
         )
+
+        organization_name = selected_interview["organization"]["name"]
 
 
     st.text_area(
@@ -130,8 +138,13 @@ def main():
                 min_experience,
                 max_experience,
                 interview_link,
-                selected_role
+                selected_role,
+                organization_name
             )
+
+        with st.expander("Show Debug Logs"):
+            captured_output = sys.stdout.getvalue()
+            st.text_area("Debug Logs", captured_output, height=150)
             
    
 
@@ -148,8 +161,9 @@ def process_resumes(description, ats_criteria, uploaded_files, min_experience, m
 
         if ats_score < int(ats_criteria):
             st.write(f"Rejected: {uploaded_file.name}, ats_score: {ats_score}")
-            continue
-        st.write(f'Passed: {uploaded_file.name} the ATS percentage criteria with {ats_score}')
+        else:
+            st.write(f'Passed: {uploaded_file.name} the ATS percentage criteria with {ats_score}'
+            )
 
         proceed_resumes.append({
             "Name": uploaded_file.name,
@@ -170,7 +184,7 @@ def process_resumes(description, ats_criteria, uploaded_files, min_experience, m
             )
 
 
-def process_and_email_resumes(description, ats_criteria, uploaded_files, min_experience, max_experience, interview_link, role_name):
+def process_and_email_resumes(description, ats_criteria, uploaded_files, min_experience, max_experience, interview_link, role_name , organization_name):
     proceed_resumes = []
 
     for uploaded_file in uploaded_files:
@@ -194,10 +208,8 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
 
         if ats_score < int(ats_criteria):
             st.write(f"Rejected: {uploaded_file.name}, ats_score: {ats_score}")
-            continue
-
-        st.write(
-            f'Passed: {uploaded_file.name} the ATS percentage criteria with {ats_score}'
+        else:
+            st.write(f'Passed: {uploaded_file.name} the ATS percentage criteria with {ats_score}'
         )
 
         candidate_details_raw = utils.get_candidate_info(pdf_content)
@@ -225,8 +237,10 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
             "Email": email,
             "Phone": phone,
             "Score": ats_score,
+            "Shortlisted": ats_score >= int(ats_criteria),
             "Resume": uploaded_file.name,
             "ResumeFile": uploaded_file
+            
         })
 
     if len(proceed_resumes) != 0:
@@ -236,19 +250,38 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
             stored = store_candidate(
                 candidate["Email"],
                 candidate["Score"],
-                interview_link
+                interview_link,
+                candidate["Shortlisted"],
+                role_name
             )
 
-            if stored:
+            if stored and candidate["Shortlisted"]:
+
                 email_service.send_email_to(
                     to_email=candidate["Email"],
                     subject="Interview Invitation",
                     body_html=email_service.candidate_email_body(
                         candidate["Name"],
                         interview_link,
-                        role_name
-                    )
+                        role_name,
+                        organization_name
+                    ),
+                    company_name=organization_name
                 )
+
+            elif stored and not candidate["Shortlisted"]:
+
+                email_service.send_email_to(
+                    to_email=candidate["Email"],
+                    subject="Application Update",
+                    body_html=email_service.rejection_email_body(
+                        candidate["Name"],
+                        role_name,
+                        organization_name
+                    ),
+                    company_name=organization_name
+                )
+
 
         zip_buffer = utils.create_zip_file(proceed_resumes)
         current_date_str = utils.get_day_month_year()

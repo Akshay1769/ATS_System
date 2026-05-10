@@ -5,6 +5,7 @@ import time
 import random
 import string
 import tempfile
+from unittest import result
 import fitz
 
 import zipfile
@@ -148,15 +149,18 @@ def file_to_text(file):
         pdf_content = docx_to_text(file)
     return pdf_content
 
-def docx_to_text(docx_path):
+def docx_to_text(docx_file):
     text = ''
     try:
-        doc = Document(docx_path)
+        doc = Document(docx_file)
+
         for para in doc.paragraphs:
             text += para.text + '\n'
+
         return text
+
     except Exception as e:
-        print(f"Error reading DOCX {docx_path.name}: {e}")
+        print(f"Error reading DOCX: {e}")
         return text
 
 def get_candidate_info(resume):
@@ -194,8 +198,11 @@ def get_ats_score(prompt, file_name, retries=10, delay=5):
         try:
             result = groq_call(prompt)
 
-            
-            numbers = re.findall(r"\d+", result)
+            if not result:
+                print("Empty AI response")
+                return 0
+
+            numbers = re.findall(r"\d+", str(result))
 
             if numbers:
                 score = int(numbers[0])
