@@ -1,8 +1,11 @@
 import os
 import smtplib
+import traceback
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+from dotenv import load_dotenv
+load_dotenv()
 
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_SERVER = os.getenv("SMTP_SERVER")
@@ -27,15 +30,15 @@ def send_email_to(to_email, subject, body_html,company_name = "" , attachment_pa
                 msg.attach(part)
 
         with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT)) as server:
-            server.starttls() 
+            server.starttls()
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg)
 
         print(f"Email sent: {to_email}")
     except smtplib.SMTPAuthenticationError as auth_err:
         print(f"Authentication Error: {auth_err}")
-    except Exception as e:
-        print(f"Error: {e}")
+    except Exception:
+        traceback.print_exc()
 
 
 

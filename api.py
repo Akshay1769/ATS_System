@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
@@ -93,8 +95,8 @@ async def analyze_resume(
             "email_sent": False
         }).execute()
 
-    except Exception as e:
-        print("Supabase insert error:", e)
+    except Exception:
+        traceback.print_exc()
 
     return {
         "filename": file.filename,

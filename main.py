@@ -6,6 +6,7 @@ from io import StringIO
 from dotenv import load_dotenv
 from supabase import create_client
 import os
+import traceback
 
 load_dotenv()
 
@@ -81,7 +82,6 @@ def main():
 
     description = ""
     interview_link = ""
-    description = ""
     organization_name = "XHire"
     
 
@@ -131,16 +131,20 @@ def main():
         elif not uploaded_files:
             st.error("Please upload at least one resume to proceed.")
         else:
-            process_and_email_resumes(
-                description,
-                ats_criteria,
-                uploaded_files,
-                min_experience,
-                max_experience,
-                interview_link,
-                selected_role,
-                organization_name
-            )
+            try:
+                process_and_email_resumes(
+                    description,
+                    ats_criteria,
+                    uploaded_files,
+                    min_experience,
+                    max_experience,
+                    interview_link,
+                    selected_role,
+                    organization_name
+                )
+
+            except Exception:
+                traceback.print_exc()
 
         with st.expander("Show Debug Logs"):
             captured_output = sys.stdout.getvalue()
@@ -186,6 +190,7 @@ def process_resumes(description, ats_criteria, uploaded_files, min_experience, m
 
 def process_and_email_resumes(description, ats_criteria, uploaded_files, min_experience, max_experience, interview_link, role_name , organization_name):
     proceed_resumes = []
+    all_candidates = []
 
     for uploaded_file in uploaded_files:
         pdf_content = utils.file_to_text(uploaded_file)
@@ -208,9 +213,11 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
 
         if ats_score < int(ats_criteria):
             st.write(f"Rejected: {uploaded_file.name}, ats_score: {ats_score}")
+
         else:
-            st.write(f'Passed: {uploaded_file.name} the ATS percentage criteria with {ats_score}'
-        )
+            st.write(
+                f'Passed: {uploaded_file.name} the ATS percentage criteria with {ats_score}'
+            )
 
         candidate_details_raw = utils.get_candidate_info(pdf_content)
 
@@ -232,7 +239,7 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
 
         name = utils.make_text_plain(name)
 
-        proceed_resumes.append({
+        candidate_data = {
             "Name": name,
             "Email": email,
             "Phone": phone,
@@ -240,20 +247,21 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
             "Shortlisted": ats_score >= int(ats_criteria),
             "Resume": uploaded_file.name,
             "ResumeFile": uploaded_file
-            
-        })
+        }
 
-    if len(proceed_resumes) != 0:
-        csv_path = utils.get_csv(proceed_resumes)
+        all_candidates.append(candidate_data)
 
-        for candidate in proceed_resumes:
+        if ats_score >= int(ats_criteria):
+            proceed_resumes.append(candidate_data)
+
+    for candidate in all_candidates:
             stored = store_candidate(
-                candidate["Email"],
-                candidate["Score"],
-                interview_link,
-                candidate["Shortlisted"],
-                role_name
-            )
+            candidate["Email"],
+            candidate["Score"],
+            interview_link,
+            candidate["Shortlisted"],
+            role_name
+        )
 
             if stored and candidate["Shortlisted"]:
 
@@ -282,6 +290,7 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
                     company_name=organization_name
                 )
 
+    if len(proceed_resumes) != 0:
 
         zip_buffer = utils.create_zip_file(proceed_resumes)
         current_date_str = utils.get_day_month_year()

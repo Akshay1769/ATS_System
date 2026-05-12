@@ -7,6 +7,7 @@ import string
 import tempfile
 from unittest import result
 import fitz
+import traceback
 
 import zipfile
 import pdfplumber
@@ -83,8 +84,8 @@ def groq_call(prompt):
 
         return response.choices[0].message.content.strip()
 
-    except Exception as e:
-        print(f"Groq Error: {e}")
+    except Exception:
+        traceback.print_exc()
         return ""
 
 
@@ -107,8 +108,8 @@ def make_text_plain(text):
         if text:
             return text.strip()
         return text
-    except Exception as e:
-        print(e)
+    except Exception:
+        traceback.print_exc()
         return ""
 
 def pdf_to_text(file):
@@ -137,8 +138,8 @@ def pdf_to_text(file):
 
         return text
 
-    except Exception as e:
-        print("PDF read error:", e)
+    except Exception:
+        traceback.print_exc()
         return text
     
 def file_to_text(file):
@@ -159,8 +160,8 @@ def docx_to_text(docx_file):
 
         return text
 
-    except Exception as e:
-        print(f"Error reading DOCX: {e}")
+    except Exception:
+        traceback.print_exc()
         return text
 
 def get_candidate_info(resume):
@@ -168,15 +169,16 @@ def get_candidate_info(resume):
         prompt = get_candidate_info_prompt(resume)
         response = groq_call(prompt)
         return response if response else ""
-    except Exception as e:
-        print(e)
+    except Exception:
+        traceback.print_exc()
         return ""
 
 def get_ats_score_deprecated(prompt):
     try:
         response = get_model().generate_content(prompt)
         return int(response.text.strip())
-    except Exception as e:
+    except Exception:
+        traceback.print_exc()
         return 0
     
 def rate_limit(delay=1):
@@ -215,8 +217,8 @@ def get_ats_score(prompt, file_name, retries=10, delay=5):
             print("Invalid AI response:", result)
             return 0
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        except Exception:
+            traceback.print_exc()
             time.sleep(delay)
             attempt += 1
 
@@ -236,8 +238,8 @@ def create_zip_file(resumes):
                 zip_file.writestr(resume["Resume"], resume_file.read())
         zip_buffer.seek(0)
         return zip_buffer
-    except Exception as e:
-        print("Error while zipping resumes", e)
+    except Exception:
+        traceback.print_exc()
         return None
 
 def get_csv(results):
@@ -248,8 +250,8 @@ def get_csv(results):
             df.to_csv(tmp_file.name, index=False)
             csv_path = tmp_file.name
         return csv_path
-    except Exception as e:
-        print(e)
+    except Exception:
+        traceback.print_exc()
         return csv_path
 
 def generate_random_string(length=16):
