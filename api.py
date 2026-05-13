@@ -6,6 +6,9 @@ import shutil
 import os
 from dotenv import load_dotenv
 from supabase import create_client
+# import streamlit as st
+
+# org_id = st.query_params.get("org")
 
 load_dotenv()
 
@@ -92,6 +95,7 @@ async def analyze_resume(
             "email": email,
             "ats_score": score,
             "shortlisted": shortlisted,
+            # "organization_id": org_id,
             "email_sent": False
         }).execute()
 

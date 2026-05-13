@@ -8,6 +8,9 @@ from supabase import create_client
 import os
 import traceback
 
+org_id = st.query_params.get("org")
+
+
 load_dotenv()
 
 supabase = create_client(
@@ -21,13 +24,14 @@ def get_base_url():
 
 sys.stdout = StringIO() 
 st.set_page_config(page_title="X Hire", page_icon=":briefcase:", layout="centered")
-
+st.write("ORG:", org_id)
 
 def get_active_interviews():
     response = (
         supabase.table("interview")
         .select("id,name,objective,url,readable_slug,organization(name)")
         .eq("is_active", True)
+        .eq("organization_id", org_id)
         .execute()
     )
 
@@ -39,6 +43,7 @@ def store_candidate(email, ats_score, interview_link ,shortlisted , role_name):
     supabase.table("candidates")
     .select("*")
     .eq("email", email)
+    .eq("organization_id", org_id)
     .eq("interview_link", interview_link)
     .execute()
     )
@@ -52,6 +57,7 @@ def store_candidate(email, ats_score, interview_link ,shortlisted , role_name):
         "ats_score": ats_score,
         "shortlisted": shortlisted,
         "interview_link": interview_link,
+        "organization_id": org_id,
         "email_sent": True,
         "role": role_name
     }).execute()
