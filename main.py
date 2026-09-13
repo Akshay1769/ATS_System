@@ -24,7 +24,7 @@ def get_base_url():
 
 sys.stdout = StringIO() 
 st.set_page_config(page_title="X Hire", page_icon=":briefcase:", layout="centered")
-st.write("ORG:", org_id)
+# st.write("ORG:", org_id)
 
 def get_active_interviews():
     response = (
