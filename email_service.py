@@ -1,57 +1,68 @@
+import base64
+import json
 import os
-import smtplib
 import traceback
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
+from email.utils import formataddr
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_USERNAME = os.getenv("SMTP_USER")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-FROM_EMAIL = os.getenv("SMTP_USER")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL")
+RESEND_API_URL = "https://api.resend.com/emails"
 
-def send_email_to(to_email, subject, body_html,company_name = "" , attachment_path=None):
+
+def send_email_to(to_email, subject, body_html, company_name="", attachment_path=None):
     missing_settings = [
         name
         for name, value in (
-            ("SMTP_SERVER", SMTP_SERVER),
-            ("SMTP_USER", SMTP_USERNAME),
-            ("SMTP_PASSWORD", SMTP_PASSWORD),
+            ("RESEND_API_KEY", RESEND_API_KEY),
+            ("RESEND_FROM_EMAIL", RESEND_FROM_EMAIL),
         )
         if not value
     ]
     if missing_settings:
         raise RuntimeError(
-            f"Missing required SMTP settings: {', '.join(missing_settings)}"
+            f"Missing required email settings: {', '.join(missing_settings)}"
         )
 
     try:
-        msg = MIMEMultipart()
-        msg['Subject'] = subject
-        msg['To'] = to_email
-        msg['From'] = f"{company_name} <{FROM_EMAIL}>"
-
-        body_part = MIMEText(body_html, 'html')
-        msg.attach(body_part)
+        payload = {
+            "from": formataddr((company_name, RESEND_FROM_EMAIL)),
+            "to": [to_email],
+            "subject": subject,
+            "html": body_html,
+        }
 
         if attachment_path:
             with open(attachment_path, 'rb') as f:
-                part = MIMEApplication(f.read())
-                part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(attachment_path))
-                msg.attach(part)
+                payload["attachments"] = [{
+                    "filename": os.path.basename(attachment_path),
+                    "content": base64.b64encode(f.read()).decode("ascii"),
+                }]
 
-        with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT)) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
+        request = Request(
+            RESEND_API_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                response.read()
+        except HTTPError as http_error:
+            error_body = http_error.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Resend API returned HTTP {http_error.code}: {error_body}"
+            ) from http_error
 
         print(f"Email sent: {to_email}")
-    except smtplib.SMTPAuthenticationError as auth_err:
-        print(f"Authentication Error: {auth_err}")
-        raise
     except Exception as e:
         print("================================")
         print("EMAIL ERROR")
