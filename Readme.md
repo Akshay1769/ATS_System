@@ -29,16 +29,17 @@ pip install -r requirements.txt
 
 1. Create a `.env` file with the following variables:
    ```
-   SMTP_SERVER=smtp.example.com
-   SMTP_PORT=587
-   SMTP_USER=your_email@example.com
-   SMTP_PASSWORD=your_email_password
+   GMAIL_SENDER=your_authorized_gmail_address
+   GMAIL_CLIENT_ID=your_oauth_client_id
+   GMAIL_CLIENT_SECRET=your_oauth_client_secret
+   GMAIL_REFRESH_TOKEN=your_oauth_refresh_token
    
    GEMINI_API_KEY=your_key
    OPENAI_API_KEY=your_key
    
    AWS_SES_FROM_EMAIL_ID=your_aws_ses_from_email
    ```
+   Configure these Gmail OAuth values as environment variables in Render.
 
 ## Run the Application
 

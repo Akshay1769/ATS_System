@@ -1,74 +1,137 @@
 import base64
-import json
+import html
 import os
-import traceback
+from email.errors import HeaderParseError
+from email.headerregistry import Address
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import formataddr
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 load_dotenv()
 
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL")
-RESEND_API_URL = "https://api.resend.com/emails"
+GMAIL_SENDER = os.getenv("GMAIL_SENDER")
+GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID")
+GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET")
+GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN")
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+INTERVIEW_APP_HOST = "xhiremain.vercel.app"
+
+
+def _validate_gmail_sender(sender):
+    try:
+        address = Address(addr_spec=sender)
+    except (HeaderParseError, ValueError) as error:
+        raise ValueError(
+            "GMAIL_SENDER must be a single email address configured for this "
+            "Gmail account."
+        ) from error
+    if address.addr_spec != sender:
+        raise ValueError(
+            "GMAIL_SENDER must be a single email address configured for this "
+            "Gmail account."
+        )
+
+
+def _validate_interview_url(interview_link):
+    if any(
+        ord(character) <= 0x20 or ord(character) == 0x7F or character == "\\"
+        for character in interview_link
+    ):
+        raise ValueError("Interview link contains invalid URL characters.")
+
+    parsed_url = urlsplit(interview_link)
+    allowed_hosts = {INTERVIEW_APP_HOST}
+
+    configured_base_url = os.getenv("BASE_URL", "")
+    configured_base = urlsplit(configured_base_url)
+    configured_host = configured_base.hostname
+    if configured_base.scheme == "https" and configured_host:
+        allowed_hosts.add(configured_host.lower())
+
+    if (
+        parsed_url.scheme != "https"
+        or not parsed_url.hostname
+        or parsed_url.hostname.lower() not in allowed_hosts
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+        or parsed_url.port not in (None, 443)
+    ):
+        raise ValueError("Interview link must be an HTTPS URL on the configured app domain.")
+
+    return html.escape(interview_link, quote=True)
 
 
 def send_email_to(to_email, subject, body_html, company_name="", attachment_path=None):
     missing_settings = [
         name
         for name, value in (
-            ("RESEND_API_KEY", RESEND_API_KEY),
-            ("RESEND_FROM_EMAIL", RESEND_FROM_EMAIL),
+            ("GMAIL_SENDER", GMAIL_SENDER),
+            ("GMAIL_CLIENT_ID", GMAIL_CLIENT_ID),
+            ("GMAIL_CLIENT_SECRET", GMAIL_CLIENT_SECRET),
+            ("GMAIL_REFRESH_TOKEN", GMAIL_REFRESH_TOKEN),
         )
         if not value
     ]
     if missing_settings:
         raise RuntimeError(
-            f"Missing required email settings: {', '.join(missing_settings)}"
+            f"Missing required Gmail settings: {', '.join(missing_settings)}"
         )
 
+    _validate_gmail_sender(GMAIL_SENDER)
+
     try:
-        payload = {
-            "from": formataddr((company_name, RESEND_FROM_EMAIL)),
-            "to": [to_email],
-            "subject": subject,
-            "html": body_html,
-        }
+        message = MIMEMultipart()
+        message["Subject"] = subject
+        message["To"] = to_email
+        message["From"] = formataddr((company_name, GMAIL_SENDER))
+        message.attach(MIMEText(body_html, "html"))
 
         if attachment_path:
             with open(attachment_path, 'rb') as f:
-                payload["attachments"] = [{
-                    "filename": os.path.basename(attachment_path),
-                    "content": base64.b64encode(f.read()).decode("ascii"),
-                }]
+                attachment = MIMEApplication(f.read())
+                attachment.add_header(
+                    "Content-Disposition",
+                    "attachment",
+                    filename=os.path.basename(attachment_path),
+                )
+                message.attach(attachment)
 
-        request = Request(
-            RESEND_API_URL,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+        credentials = Credentials(
+            token=None,
+            refresh_token=GMAIL_REFRESH_TOKEN,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=GMAIL_CLIENT_ID,
+            client_secret=GMAIL_CLIENT_SECRET,
+            scopes=[GMAIL_SEND_SCOPE],
         )
-        try:
-            with urlopen(request, timeout=30) as response:
-                response.read()
-        except HTTPError as http_error:
-            error_body = http_error.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"Resend API returned HTTP {http_error.code}: {error_body}"
-            ) from http_error
+        gmail = build(
+            "gmail",
+            "v1",
+            credentials=credentials,
+            cache_discovery=False,
+        )
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+        # Gmail enforces that From is the OAuth account or a verified send-as alias.
+        result = gmail.users().messages().send(
+            userId="me",
+            body={"raw": raw_message},
+        ).execute()
 
-        print(f"Email sent: {to_email}")
+        print(f"Gmail accepted message. Message ID: {result.get('id')}")
     except Exception as e:
         print("================================")
         print("EMAIL ERROR")
-        print(type(e).__name__)
-        print(str(e))
-        traceback.print_exc()
+        status = getattr(getattr(e, "resp", None), "status", None)
+        if status is not None:
+            print(f"{type(e).__name__} (HTTP {status})")
+        else:
+            print(type(e).__name__)
         print("================================")
         raise
 
@@ -143,6 +206,11 @@ hr_body_html = '''
 
 
 def candidate_email_body(candidate_name, interview_link , role_name,company_name):
+    candidate_name = html.escape(str(candidate_name), quote=True)
+    interview_link = _validate_interview_url(interview_link)
+    role_name = html.escape(str(role_name), quote=True)
+    company_name = html.escape(str(company_name), quote=True)
+
     body_html = f'''
     <div style="font-family: Arial, sans-serif; font-size:14px; color:#000; line-height:1.6;">
 
@@ -201,7 +269,12 @@ def candidate_email_body(candidate_name, interview_link , role_name,company_name
     '''
     return body_html
 
+
 def rejection_email_body(candidate_name, role_name, company_name):
+    candidate_name = html.escape(str(candidate_name), quote=True)
+    role_name = html.escape(str(role_name), quote=True)
+    company_name = html.escape(str(company_name), quote=True)
+
     body_html = f'''
     <div style="font-family: Arial, sans-serif; font-size:14px; color:#000; line-height:1.6;">
 
