@@ -41,7 +41,7 @@ def get_active_interviews():
 def store_candidate(email, ats_score, interview_link ,shortlisted , role_name):
     existing = (
     supabase.table("candidates")
-    .select("*")
+    .select("email_sent")
     .eq("email", email)
     .eq("organization_id", org_id)
     .eq("interview_link", interview_link)
@@ -49,8 +49,10 @@ def store_candidate(email, ats_score, interview_link ,shortlisted , role_name):
     )
 
     if existing.data:
-        st.warning(f"Email already sent to {email}")
-        return False
+        if existing.data[0].get("email_sent"):
+            st.warning(f"Email already sent to {email}")
+            return False
+        return True
 
     supabase.table("candidates").insert({
         "email": email,
@@ -58,11 +60,19 @@ def store_candidate(email, ats_score, interview_link ,shortlisted , role_name):
         "shortlisted": shortlisted,
         "interview_link": interview_link,
         "organization_id": org_id,
-        "email_sent": True,
+        "email_sent": False,
         "role": role_name
     }).execute()
 
     return True
+
+
+def mark_candidate_email_sent(email, interview_link):
+    supabase.table("candidates").update({"email_sent": True}) \
+        .eq("email", email) \
+        .eq("organization_id", org_id) \
+        .eq("interview_link", interview_link) \
+        .execute()
 
 
 def main():
@@ -282,6 +292,7 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
                     ),
                     company_name=organization_name
                 )
+                mark_candidate_email_sent(candidate["Email"], interview_link)
 
             elif stored and not candidate["Shortlisted"]:
 
@@ -295,6 +306,7 @@ def process_and_email_resumes(description, ats_criteria, uploaded_files, min_exp
                     ),
                     company_name=organization_name
                 )
+                mark_candidate_email_sent(candidate["Email"], interview_link)
 
     if len(proceed_resumes) != 0:
 

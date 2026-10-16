@@ -14,6 +14,20 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 FROM_EMAIL = os.getenv("SMTP_USER")
 
 def send_email_to(to_email, subject, body_html,company_name = "" , attachment_path=None):
+    missing_settings = [
+        name
+        for name, value in (
+            ("SMTP_SERVER", SMTP_SERVER),
+            ("SMTP_USER", SMTP_USERNAME),
+            ("SMTP_PASSWORD", SMTP_PASSWORD),
+        )
+        if not value
+    ]
+    if missing_settings:
+        raise RuntimeError(
+            f"Missing required SMTP settings: {', '.join(missing_settings)}"
+        )
+
     try:
         msg = MIMEMultipart()
         msg['Subject'] = subject
@@ -37,9 +51,15 @@ def send_email_to(to_email, subject, body_html,company_name = "" , attachment_pa
         print(f"Email sent: {to_email}")
     except smtplib.SMTPAuthenticationError as auth_err:
         print(f"Authentication Error: {auth_err}")
-    except Exception:
+        raise
+    except Exception as e:
+        print("================================")
+        print("EMAIL ERROR")
+        print(type(e).__name__)
+        print(str(e))
         traceback.print_exc()
-
+        print("================================")
+        raise
 
 
 hr_body_html = '''
